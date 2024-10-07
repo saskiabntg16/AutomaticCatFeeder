@@ -1,0 +1,237 @@
+#include <Arduino.h>
+#include <uRTCLib.h>
+#include <LiquidCrystal_I2C.h>
+#include <ESP32_Servo.h>
+
+//Konfigurasi Blynk
+#define BLYNK_TEMPLATE_ID "TMPL6QUr8_Vgq"
+#define BLYNK_TEMPLATE_NAME "Automatic Cat Feeder"
+#define BLYNK_AUTH_TOKEN "0hS-1b3fyoWDNwK-4LULXeIj1o3-00ro"
+
+//library blynk
+#include <BlynkSimpleEsp32.h>
+
+const int PIR = 14;
+const int servo = 18;
+const int trigPin = 33;
+const int echoPin = 32;
+const int buzzer = 4;
+int sound = 500;
+int pos = 0;
+int statePIR = 0;
+
+//variabel
+Servo myservo; 
+int StatusPakan;
+int StatusRTC;
+
+//rtc
+uRTCLib rtc(0x68);
+char dataHari[7][12] = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
+
+void setup()
+{
+delay (2000);
+	Serial.begin(9600);
+	Serial.println("Serial OK");
+
+//Servo
+  myservo.attach(servo);
+  myservo.write(pos);
+
+//Wire
+	#ifdef ARDUINO_ARCH_ESP8266
+		URTCLIB_WIRE.begin(0, 2); 
+	#else
+		URTCLIB_WIRE.begin();
+	#endif
+
+//PIR
+  pinMode(PIR,INPUT);
+
+//Koneksi ke Wifi
+  WiFi.begin("Leonyoyo", "mamasayangyoyo");
+
+//Uji koneksi
+  while(WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+  }
+
+  Serial.println("WiFi Terkoneksi");
+
+  //Koneksi ke Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, "Leonyoyo", "mamasayangyoyo");
+  Serial.println("Blynk terkoneksi");
+
+//ultrasonik
+  pinMode(trigPin,  OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(buzzer, OUTPUT);
+
+	rtc.set(0, 00, 02, 2, 17, 06, 23);
+	//(detik, menit, jam, hari, tanggal, bulan, tahun)
+}
+
+//Penjadwalan Otomatis
+void Feeding()
+{
+  for (int posisi = 0; posisi<=180; posisi++)
+  {
+    myservo.write(posisi);
+    delay(10);
+  }
+
+  for (int posisi = 180; posisi>=0; posisi--)
+  {
+    myservo.write(posisi);
+    delay(10);
+  }
+}
+
+void loop() 
+{ 
+  //Blynk
+  Blynk.run();
+  
+  //Menampilkan StatusPakan di Serial Monitor
+  Serial.println("Status Pakan : " + String(StatusPakan));
+
+  //PIR
+  statePIR = digitalRead(PIR);
+
+  //rtc
+  Serial.print("Date: ");
+	Serial.print(dataHari[rtc.dayOfWeek()]);
+  Serial.print(',');
+  Serial.print(rtc.day());
+  Serial.print('/');
+	Serial.print(rtc.month());
+  Serial.print('/');
+	Serial.print(rtc.year()+2000);
+	
+	Serial.print(' ');
+
+	Serial.print(" Time: ");
+  Serial.print(rtc.hour());
+	Serial.print(':');
+	Serial.print(rtc.minute());
+	Serial.print(':');
+	Serial.print(rtc.second());
+
+  Serial.print(' ');
+
+	Serial.print(" Temp: ");
+	Serial.print(rtc.temp()  / 100);
+  Serial.print("° Celcius");
+
+	Serial.println();
+
+  //ultrasonik dan buzzer
+  long duration, distance;
+  digitalWrite(trigPin, LOW);  
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = (duration / 2) / 29.1;
+
+  if (StatusPakan == 1)
+  {
+    Feeding();
+    Blynk.virtualWrite(V0, 0);
+    StatusPakan = 0;
+    delay(500);
+  }
+
+  //rtc
+  if ((rtc.hour() == 02) && (rtc.minute() >= 00) && (rtc.second() <= 5))
+  {
+    Feeding();
+    delay(2000);
+    myservo.write(pos); 
+  }
+
+    if ((rtc.hour() == 07) && (rtc.minute() >= 35) && (rtc.second() <= 5))
+  {
+    Feeding();
+    delay(2000);
+    myservo.write(pos); 
+  }
+
+    if ((rtc.hour() == 10) && (rtc.minute() >= 30 ) && (rtc.second() <= 5))
+  {
+    Serial.println("Waktunya Pemberian Wet Food atau Vitamin");
+  }
+
+    if ((rtc.hour() == 13) && (rtc.minute() >= 35) && (rtc.second() <= 5))
+  {
+    Feeding();
+    delay(2000);
+    myservo.write(pos); 
+  }
+
+    if ((rtc.hour() == 16) && (rtc.minute() >= 35) && (rtc.second() <= 5))
+  {
+    Serial.println("Waktunya Pemberian Wet Food atau Vitamin");
+  }
+
+  if ((rtc.hour() == 19) && (rtc.minute() >= 35 ) && (rtc.second() <= 5))
+  {
+    Feeding();
+    delay(2000);
+    myservo.write(pos); 
+  }
+  delay(500);
+
+  if (StatusPakan == 1)
+  {
+    Feeding();
+    Blynk.virtualWrite(V0, 0);
+    StatusPakan = 0;
+    delay(500);
+  }
+
+  if (statePIR == HIGH) {
+      Serial.println("Kucing Mendekat");
+      myservo.write(100); 
+      Serial.println("Membuka Servo");
+      delay(2000);
+  } else {
+      myservo.write(pos); 
+  }
+  delay(500);
+
+//Ultrasonik
+    if (distance > 15) {
+    digitalWrite(buzzer, HIGH);
+    Serial.print(distance);
+    Serial.println("  cm");
+    Serial.println("Makanan Hampir Habis, Petugas Harap untuk Mengisi Secepatnya");
+    tone(buzzer, sound);
+    delay(1000);
+  } else {
+       digitalWrite(buzzer,  LOW);
+       Serial.print(distance);
+      Serial.println("  cm");
+      noTone(buzzer);
+       delay(1000);
+  }
+  delay(500);
+}
+
+//Membaca DS StatusPakan
+  BLYNK_WRITE(V0)
+{
+//Membaca DS ke Variabel
+  StatusPakan = param.asInt();
+}
+
+//Membaca DS StatusPakan
+  BLYNK_WRITE(V1)
+{
+//Membaca DS ke Variabel
+  StatusRTC = param.asInt();
+}
